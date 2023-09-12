@@ -11,6 +11,7 @@ from .writer import (
     FilesSampleWriter,
     ParquetSampleWriter,
     TFRecordSampleWriter,
+    MosaicStreamingWriter,
     DummySampleWriter,
 )
 from .reader import Reader
@@ -74,6 +75,7 @@ def download(
     url_list: str,
     image_size: int = 256,
     output_folder: str = "images",
+    temp_download_folder: Optional[str] = None,
     processes_count: int = 1,
     resize_mode: str = "border",
     resize_only_if_bigger: bool = False,
@@ -129,8 +131,9 @@ def download(
 
     logger_process = LoggerProcess(output_folder, enable_wandb, wandb_project, config_parameters)
 
-    tmp_path = output_folder + "/_tmp"
-    fs, tmp_dir = fsspec.core.url_to_fs(tmp_path)
+    if temp_download_folder is None:
+        temp_download_folder = output_folder + "/_tmp"
+    fs, tmp_dir = fsspec.core.url_to_fs(temp_download_folder)
     if not fs.exists(tmp_dir):
         fs.mkdir(tmp_dir)
 
@@ -186,7 +189,7 @@ def download(
         save_additional_columns,
         number_sample_per_shard,
         done_shards,
-        tmp_path,
+        temp_download_folder,
     )
 
     if output_format == "webdataset":
@@ -197,6 +200,8 @@ def download(
         sample_writer_class = FilesSampleWriter  # type: ignore
     elif output_format == "tfrecord":
         sample_writer_class = TFRecordSampleWriter  # type: ignore
+    elif output_format == "mosaicstreaming":
+        sample_writer_class = MosaicStreamingWriter  # type: ignore
     elif output_format == "dummy":
         sample_writer_class = DummySampleWriter  # type: ignore
     else:
