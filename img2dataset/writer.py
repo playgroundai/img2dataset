@@ -293,6 +293,72 @@ class FilesSampleWriter:
         self.buffered_parquet_writer.close()
 
 
+class MosaicStreamingWriter:
+    def __init__(
+        self,
+        shard_id,
+        output_folder,
+        save_caption,
+        oom_shard_count,
+        schema,
+        encode_format,
+    ):
+        from streaming import MDSWriter
+
+        self.oom_shard_count = oom_shard_count
+        shard_name = "{shard_id:0{oom_shard_count}d}".format(  # pylint: disable=consider-using-f-string
+            shard_id=shard_id, oom_shard_count=oom_shard_count
+        )
+
+        self.img_col_name = encode_format
+        img_mds_format = 'jpeg' if self.img_col_name == 'jpg' else self.img_col_name
+
+        self.mds_columns = {
+            '__key__': 'str',
+            self.img_col_name: img_mds_format,
+            **self.pyarrow_schema_to_mds_columns(schema),
+        }
+
+        self.save_caption = save_caption
+        if self.save_caption:
+            self.mds_columns['txt'] = 'str'
+
+        self.mdswriter = MDSWriter(
+            out=f"{output_folder}/{shard_name}",
+            columns=self.mds_columns,
+        )
+
+    def pyarrow_schema_to_mds_columns(self, schema):
+        PYARROW_TYPE_TO_MDS_TYPE = {
+            pa.string(): "str",
+        }
+
+        return {field.name: PYARROW_TYPE_TO_MDS_TYPE.get(field.type, str(field.type)) for field in schema}
+
+    def write(self, img_str, key, caption, meta):
+        """Write sample to MDS"""
+        if img_str is not None:
+            sample = {
+                "__key__": key,
+                self.img_col_name: img_str,
+            }
+            if self.save_caption:
+                sample["txt"] = str(caption) if caption is not None else ""
+
+            # some meta data may not be JSON serializable
+            for k, v in meta.items():
+                if isinstance(v, np.ndarray):
+                    v = v.tolist()
+                if v is None:
+                    v = '' # HACK
+                sample[k] = v
+
+            self.mdswriter.write(sample)
+
+    def close(self):
+        self.mdswriter.finish()
+
+
 class DummySampleWriter:
     """Does not write"""
 
