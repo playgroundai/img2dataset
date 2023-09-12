@@ -2,6 +2,7 @@
 
 import json
 import os
+from pathlib import Path
 
 import fsspec
 import numpy as np
@@ -304,6 +305,7 @@ class MosaicStreamingWriter:
         encode_format,
     ):
         from streaming import MDSWriter
+        self.set_gcp_credentials_in_environ()
 
         self.oom_shard_count = oom_shard_count
         shard_name = "{shard_id:0{oom_shard_count}d}".format(  # pylint: disable=consider-using-f-string
@@ -327,6 +329,17 @@ class MosaicStreamingWriter:
             out=f"{output_folder}/{shard_name}",
             columns=self.mds_columns,
         )
+
+    def set_gcp_credentials_in_environ(self):
+        if "GCS_KEY" in os.environ and "GCS_SECRET" in os.environ:
+            return
+
+        if "GCS_KEYS_JSON" not in os.environ:
+            raise ValueError("Must set GCS_KEYS_JSON in environment to use MosaicStreamingWriter")
+
+        GCS_SECRETS = json.loads(Path(os.environ["GCS_KEYS_JSON"]).read_text())
+        os.environ["GCS_KEY"] = GCS_SECRETS["GCS_KEY"]
+        os.environ["GCS_SECRET"] = GCS_SECRETS["GCS_SECRET"]
 
     def pyarrow_schema_to_mds_columns(self, schema):
         PYARROW_TYPE_TO_MDS_TYPE = {
