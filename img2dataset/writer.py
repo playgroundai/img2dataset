@@ -328,6 +328,7 @@ class MosaicStreamingWriter:
         self.mdswriter = MDSWriter(
             out=f"{output_folder}/{shard_name}",
             columns=self.mds_columns,
+            size_limit=None, # follow main parameter on # of shards
         )
 
     def set_gcp_credentials_in_environ(self):
