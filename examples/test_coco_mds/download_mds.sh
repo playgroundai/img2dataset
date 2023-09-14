@@ -9,7 +9,7 @@ img2dataset \
     --url_col "URL" \
     --caption_col "TEXT" \
     --output_format mosaicstreaming \
-    --output_folder gs://pai-datasets-private/test-img2dataset/coco/ \
+    --output_folder gs://pai-datasets-private/test-img2dataset/coco \
     --temp_download_folder ./tmp_coco_mds \
     --processes_count 4 \
     --thread_count 8 \

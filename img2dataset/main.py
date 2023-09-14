@@ -133,7 +133,11 @@ def download(
 
     if temp_download_folder is None:
         temp_download_folder = output_folder + "/_tmp"
+    
+    temp_download_folder = make_path_absolute(temp_download_folder)
+
     fs, tmp_dir = fsspec.core.url_to_fs(temp_download_folder)
+ 
     if not fs.exists(tmp_dir):
         fs.mkdir(tmp_dir)
 
@@ -268,7 +272,7 @@ def download(
     logger_process.join()
 
     if not hasattr(fs, "s3"):
-        fs.rm(tmp_dir, recursive=True)
+        fs.rmdir(tmp_dir)
 
 
 def main():
