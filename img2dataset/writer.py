@@ -345,6 +345,8 @@ class MosaicStreamingWriter:
     def pyarrow_schema_to_mds_columns(self, schema):
         PYARROW_TYPE_TO_MDS_TYPE = {
             pa.string(): "str",
+            pa.float32(): "float32",
+            pa.float64(): "float64",
         }
 
         return {field.name: PYARROW_TYPE_TO_MDS_TYPE.get(field.type, str(field.type)) for field in schema}
