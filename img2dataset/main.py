@@ -26,6 +26,10 @@ import sys
 import signal
 import os
 
+import ssl
+# Hack: disable SSL verification to enable running under slurm
+ssl._create_default_https_context = ssl._create_unverified_context
+
 logging.getLogger("exifread").setLevel(level=logging.CRITICAL)
 
 
