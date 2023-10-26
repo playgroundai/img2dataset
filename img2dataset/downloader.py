@@ -34,11 +34,15 @@ def is_disallowed(headers, user_agent_token, disallowed_header_directives):
     return False
 
 
+def is_rate_limit_error(err):
+    return 'HTTP Error 429' in err
+
+
 def download_image(row, timeout, user_agent_token, disallowed_header_directives):
     """Download an image with urllib"""
     key, url = row
     img_stream = None
-    user_agent_string = "Mozilla/5.0 (X11; Ubuntu; Linux x86_64; rv:72.0) Gecko/20100101 Firefox/72.0"
+    user_agent_string = "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/118.0.0.0 Safari/537.36"
     if user_agent_token:
         user_agent_string += f" (compatible; {user_agent_token}; +https://github.com/rom1504/img2dataset)"
     try:
@@ -49,18 +53,28 @@ def download_image(row, timeout, user_agent_token, disallowed_header_directives)
                 user_agent_token,
                 disallowed_header_directives,
             ):
+                import remote_pdb; remote_pdb.set_trace()
                 return key, None, "Use of image disallowed by X-Robots-Tag directive"
             img_stream = io.BytesIO(r.read())
         return key, img_stream, None
     except Exception as err:  # pylint: disable=broad-except
+        # import remote_pdb; remote_pdb.set_trace()
+        #if not is_rate_limit_error(err):
+        #    print(f"error: {url}: {err}")
         if img_stream is not None:
             img_stream.close()
         return key, None, str(err)
 
 
 def download_image_with_retry(row, timeout, retries, user_agent_token, disallowed_header_directives):
+    exponential_backoff = 2
     for _ in range(retries + 1):
         key, img_stream, err = download_image(row, timeout, user_agent_token, disallowed_header_directives)
+        if err is not None and is_rate_limit_error(err):
+            time.sleep(exponential_backoff * timeout)
+            # print(f"retrying {row[1]}")
+            exponential_backoff *= 2
+            continue
         if img_stream is not None:
             return key, img_stream, err
     return key, None, err
