@@ -27,6 +27,11 @@ class ResizeMode(Enum):
     keep_ratio_largest = 4  # pylint: disable=invalid-name
 
 
+class CropMode(Enum):
+    no = 0 # pylint: disable=invalid-name
+    field = 1 # pylint: disable=invalid-name
+
+
 # thanks https://stackoverflow.com/questions/11130156/suppress-stdout-stderr-print-from-python-functions
 class SuppressStdoutStderr:
     """
@@ -83,6 +88,7 @@ class Resizer:
         self,
         image_size,
         resize_mode,
+        crop_mode,
         resize_only_if_bigger,
         upscale_interpolation="lanczos",
         downscale_interpolation="area",
@@ -110,6 +116,11 @@ class Resizer:
                 raise Exception(f"Invalid option for resize_mode: {resize_mode}")
             resize_mode = ResizeMode[resize_mode]
         self.resize_mode = resize_mode
+        if isinstance(crop_mode, str):
+            if crop_mode not in CropMode.__members__:  # pylint: disable=unsupported-membership-test
+                raise Exception(f"Invalid option for crop_mode: {crop_mode}")
+            crop_mode = CropMode[crop_mode]
+        self.crop_mode = crop_mode
         self.resize_only_if_bigger = resize_only_if_bigger
         self.upscale_interpolation = inter_str_to_cv2(upscale_interpolation)
         self.downscale_interpolation = inter_str_to_cv2(downscale_interpolation)
@@ -134,7 +145,7 @@ class Resizer:
         self.max_aspect_ratio = max_aspect_ratio
         self.blurrer = blurrer
 
-    def __call__(self, img_stream, blurring_bbox_list=None):
+    def __call__(self, img_stream, blurring_bbox_list=None, maybe_crop=None):
         """
         input: an image stream, optionally a list of bounding boxes to blur.
         output: img_str, width, height, original_width, original_height, err
@@ -173,6 +184,33 @@ class Resizer:
 
                 # Flag to check if blurring is still needed.
                 maybe_blur_still_needed = True
+
+                # cropping in following conditions
+                if self.crop_mode == CropMode.field and maybe_crop is not None:
+                    if blurring_bbox_list is not None and self.blurrer is not None:
+                        img = self.blurrer(img=img, bbox_list=blurring_bbox_list)
+                    img = A.random_crop(img, self.image_size, self.image_size)
+                    # maybe_crop can be top-left, top-right, bottom-left, bottom-right
+                    width = int(img.shape[1] / 2)
+                    height = int(img.shape[0] / 2)
+                    if maybe_crop == "top-left":
+                        # crop to the top-left quadrant
+                        img = img[:height, :width]
+                    elif maybe_crop == "top-right":
+                        # crop to the top-right quadrant
+                        img = img[width:2 * width, :height]
+                    elif maybe_crop == "bottom-left":
+                        # crop to the bottom-left quadrant
+                        img = img[:width, height:2 * height]
+                    elif maybe_crop == "bottom-right":
+                        # crop to the bottom-right quadrant
+                        img = img[width:2 * width, height:2 * height]
+                    else:
+                        raise ValueError(f"Invalid crop mode: {maybe_crop}")
+
+                    encode_needed = True
+                    maybe_blur_still_needed = False
+                    original_height, original_width = height, width
 
                 # resizing in following conditions
                 if self.resize_mode in (ResizeMode.keep_ratio, ResizeMode.center_crop):

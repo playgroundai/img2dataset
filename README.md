@@ -117,6 +117,9 @@ This module exposes a single function `download` which takes the same arguments 
 * **output_folder** The path to the output folder. (default *"images"*)
 * **processes_count** The number of processes used for downloading the pictures. This is important to be high for performance. (default *1*)
 * **thread_count** The number of threads used for downloading the pictures. This is important to be high for performance. (default *256*)
+* **crop_mode** The way to crop pictures
+  * **no** doesn't crop at all (default)
+  * **field** crops based on the `crop` field. can be "top-right", "top-left", "bottom-left", or "bottom-right"
 * **resize_mode** The way to resize pictures, can be no, border or keep_ratio (default *border*)
   * **no** doesn't resize at all
   * **border** will make the image image_size x image_size and add a border

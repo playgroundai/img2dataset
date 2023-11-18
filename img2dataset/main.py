@@ -82,6 +82,7 @@ def download(
     temp_download_folder: Optional[str] = None,
     processes_count: int = 1,
     resize_mode: str = "border",
+    crop_mode: str = "no",
     resize_only_if_bigger: bool = False,
     upscale_interpolation: str = "lanczos",
     downscale_interpolation: str = "area",
@@ -223,6 +224,7 @@ def download(
     resizer = Resizer(
         image_size=image_size,
         resize_mode=resize_mode,
+        crop_mode=crop_mode,
         resize_only_if_bigger=resize_only_if_bigger,
         upscale_interpolation=upscale_interpolation,
         downscale_interpolation=downscale_interpolation,

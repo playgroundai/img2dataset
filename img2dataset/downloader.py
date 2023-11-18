@@ -187,6 +187,7 @@ class Downloader:
         failed_to_resize = 0
         url_indice = self.column_list.index("url")
         caption_indice = self.column_list.index("caption") if "caption" in self.column_list else None
+        crop_indice = self.column_list.index("crop") if "crop" in self.column_list else None
         hash_indice = (
             self.column_list.index(self.verify_hash_type) if self.verify_hash_type in self.column_list else None
         )
@@ -249,6 +250,8 @@ class Downloader:
                     if self.compute_hash is not None:
                         meta[self.compute_hash] = None
 
+                    maybe_crop = sample_data[crop_indice] if crop_indice is not None else None
+
                     if error_message is not None:
                         failed_to_download += 1
                         status = "failed_to_download"
@@ -292,7 +295,7 @@ class Downloader:
                         original_width,
                         original_height,
                         error_message,
-                    ) = self.resizer(img_stream, bbox_list)
+                    ) = self.resizer(img_stream, bbox_list, maybe_crop)
                     if error_message is not None:
                         failed_to_resize += 1
                         status = "failed_to_resize"
