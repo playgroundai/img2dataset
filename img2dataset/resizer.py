@@ -169,14 +169,6 @@ class Resizer:
                     img = np.rint(img.clip(min=0, max=255)).astype(np.uint8)
                     encode_needed = True
                 original_height, original_width = img.shape[:2]
-                # check if image is too small
-                if min(original_height, original_width) < self.min_image_size:
-                    return None, None, None, None, None, "image too small"
-                if original_height * original_width > self.max_image_area:
-                    return None, None, None, None, None, "image area too large"
-                # check if wrong aspect ratio
-                if max(original_height, original_width) / min(original_height, original_width) > self.max_aspect_ratio:
-                    return None, None, None, None, None, "aspect ratio too large"
 
                 # check if resizer was defined during init if needed
                 if blurring_bbox_list is not None and self.blurrer is None:
@@ -210,6 +202,15 @@ class Resizer:
                     encode_needed = True
                     maybe_blur_still_needed = False
                     original_height, original_width = height, width
+
+                # check if image is too small
+                if min(original_height, original_width) < self.min_image_size:
+                    return None, None, None, None, None, "image too small"
+                if original_height * original_width > self.max_image_area:
+                    return None, None, None, None, None, "image area too large"
+                # check if wrong aspect ratio
+                if max(original_height, original_width) / min(original_height, original_width) > self.max_aspect_ratio:
+                    return None, None, None, None, None, "aspect ratio too large"
 
                 # resizing in following conditions
                 if self.resize_mode in (ResizeMode.keep_ratio, ResizeMode.center_crop):
