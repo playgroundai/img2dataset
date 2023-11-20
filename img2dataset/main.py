@@ -17,6 +17,7 @@ from .writer import (
 from .reader import Reader
 from .downloader import Downloader
 from .distributor import (
+    single_process_distributor,
     multiprocessing_distributor,
     pyspark_distributor,
     ray_distributor,
@@ -259,7 +260,9 @@ def download(
     )
 
     print("Starting the downloading of this file")
-    if distributor == "multiprocessing":
+    if distributor == "single_process":
+        distributor_fn = single_process_distributor
+    elif distributor == "multiprocessing":
         distributor_fn = multiprocessing_distributor
     elif distributor == "pyspark":
         distributor_fn = pyspark_distributor

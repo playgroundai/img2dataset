@@ -21,6 +21,22 @@ def retrier(runf, failed_shards, max_shard_retry):
         )
 
 
+def single_process_distributor(_, downloader, reader, __, max_shard_retry):
+    """Pretend to distribute the work to other processes, but run everything in the main process"""
+    # pylint: disable=unused-argument
+    def run(gen):
+        failed_shards = []
+        for item in tqdm(gen):
+            status, row = downloader(item)
+            if status is False:
+                failed_shards.append(row)
+        return failed_shards
+
+    failed_shards = run(reader)
+
+    retrier(run, failed_shards, max_shard_retry)
+
+
 def multiprocessing_distributor(processes_count, downloader, reader, _, max_shard_retry):
     """Distribute the work to the processes using multiprocessing"""
     ctx = get_context("spawn")
