@@ -189,7 +189,6 @@ class Resizer:
                 if self.crop_mode == CropMode.field and maybe_crop is not None:
                     if blurring_bbox_list is not None and self.blurrer is not None:
                         img = self.blurrer(img=img, bbox_list=blurring_bbox_list)
-                    img = A.random_crop(img, self.image_size, self.image_size)
                     # maybe_crop can be top-left, top-right, bottom-left, bottom-right
                     width = int(img.shape[1] / 2)
                     height = int(img.shape[0] / 2)
@@ -198,13 +197,13 @@ class Resizer:
                         img = img[:height, :width]
                     elif maybe_crop == "top-right":
                         # crop to the top-right quadrant
-                        img = img[width:2 * width, :height]
+                        img = img[:height, width:2 * width]
                     elif maybe_crop == "bottom-left":
                         # crop to the bottom-left quadrant
-                        img = img[:width, height:2 * height]
+                        img = img[height:2 * height, :width]
                     elif maybe_crop == "bottom-right":
                         # crop to the bottom-right quadrant
-                        img = img[width:2 * width, height:2 * height]
+                        img = img[height:2 * height, width:2 * width]
                     else:
                         raise ValueError(f"Invalid crop mode: {maybe_crop}")
 

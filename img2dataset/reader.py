@@ -25,6 +25,7 @@ class Reader:
     - save_additional_columns: the list of additional columns to save
     - number_sample_per_shard: the number of samples per shard
     - done_shards: a set of already done shards
+    - crop_mode: the crop mode
     """
 
     def __init__(
@@ -39,6 +40,7 @@ class Reader:
         number_sample_per_shard,
         done_shards,
         tmp_path,
+        crop_mode,
     ) -> None:
         self.input_format = input_format
         self.url_col = url_col
@@ -48,6 +50,7 @@ class Reader:
         self.save_additional_columns = save_additional_columns
         self.number_sample_per_shard = number_sample_per_shard
         self.done_shards = done_shards
+        self.crop_mode = crop_mode
 
         fs, url_path = fsspec.core.url_to_fs(url_list)
         self.fs = fs
@@ -74,6 +77,8 @@ class Reader:
             self.column_list = self.column_list + ["url"]
         else:
             raise ValueError(f"Invalid input format {self.input_format}")
+        if self.crop_mode is not None:
+            self.column_list.append("crop")
 
     def _save_to_arrow(self, input_file, start_shard_id):
         """Read the input file and save to arrow files in a temporary directory"""
@@ -114,6 +119,8 @@ class Reader:
                     columns_to_read += [self.verify_hash_col]
                 if self.save_additional_columns is not None:
                     columns_to_read += self.save_additional_columns
+                if self.crop_mode is not None:
+                    columns_to_read += ["crop"]
                 df = pq.read_table(file, columns=columns_to_read)
         else:
             raise ValueError(f"Unknown input format {self.input_format}")
