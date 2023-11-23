@@ -200,7 +200,7 @@ def download(
         number_sample_per_shard,
         done_shards,
         temp_download_folder,
-        crop_mode,
+        crop_mode if crop_mode != "no" else None,
     )
 
     if output_format == "webdataset":
