@@ -103,7 +103,7 @@ def download_and_process_image_with_retry(
     semaphore,
     resizer,
 ):
-    key, img_stream, err = download_image_with_retry(
+    key, img_stream, error_message = download_image_with_retry(
         row, timeout, retries, user_agent_token, disallowed_header_directives
     )
     try:
