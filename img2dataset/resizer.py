@@ -154,7 +154,7 @@ class Resizer:
             if self.disable_all_reencoding:
                 return img_stream.read(), None, None, None, None, None
             with SuppressStdoutStderr():
-                cv2.setNumThreads(1)
+                cv2.setNumThreads(8)
                 img_stream.seek(0)
                 encode_needed = imghdr.what(img_stream) != self.what_ext if self.skip_reencode else True
                 img_stream.seek(0)
