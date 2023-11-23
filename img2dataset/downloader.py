@@ -103,6 +103,9 @@ def download_and_process_image_with_retry(
     semaphore,
     resizer,
 ):
+    successes = 0
+    failed_to_download = 0
+    failed_to_resize = 0
     key, img_stream, error_message = download_image_with_retry(
         row, timeout, retries, user_agent_token, disallowed_header_directives
     )
@@ -238,6 +241,8 @@ def download_and_process_image_with_retry(
         traceback.print_exc()
         print(f"Sample {key} failed to download: {err}")
     semaphore.release()
+
+    return successes, failed_to_download, failed_to_resize
 
 
 def compute_key(key, shard_id, oom_sample_per_shard, oom_shard_count):
@@ -376,7 +381,11 @@ class Downloader:
         )
         oom_sample_per_shard = math.ceil(math.log10(self.number_sample_per_shard))
         with ThreadPool(self.thread_count) as thread_pool:
-            for _ in thread_pool.imap_unordered(
+            for (
+                step_successes,
+                step_failed_to_download,
+                step_failed_to_resize,
+            ) in thread_pool.imap_unordered(
                 lambda x: download_and_process_image_with_retry(
                     x,
                     timeout=self.timeout,
@@ -402,7 +411,9 @@ class Downloader:
                 ),
                 loader,
             ):
-                pass
+                successes += step_successes
+                failed_to_download += step_failed_to_download
+                failed_to_resize += step_failed_to_resize
 
             sample_writer.close()
             thread_pool.terminate()
