@@ -98,11 +98,10 @@ def download_and_process_image_with_retry(
     extract_exif,
     compute_hash,
     verify_hash_type,
-    status_dict,
-    sample_writer,
     semaphore,
     resizer,
 ):
+    sample = None
     successes = 0
     failed_to_download = 0
     failed_to_resize = 0
@@ -138,9 +137,9 @@ def download_and_process_image_with_retry(
         if error_message is not None:
             failed_to_download += 1
             status = "failed_to_download"
-            status_dict.increment(error_message)
             meta["status"] = status
-            sample_writer.write(
+            meta["error_message"] = error_message
+            sample = (
                 None,
                 str_key,
                 sample_data[caption_indice] if caption_indice is not None else None,
@@ -157,10 +156,10 @@ def download_and_process_image_with_retry(
             if test_hash != sample_data[hash_indice]:
                 failed_to_download += 1
                 status = "failed_to_download"
-                status_dict.increment("hash mismatch")
+                error_message = "hash mismatch"
                 meta["status"] = status
-                meta["error_message"] = "hash mismatch"
-                sample_writer.write(
+                meta["error_message"] = error_message
+                sample = (
                     None,
                     str_key,
                     sample_data[caption_indice] if caption_indice is not None else None,
@@ -184,10 +183,9 @@ def download_and_process_image_with_retry(
         if error_message is not None:
             failed_to_resize += 1
             status = "failed_to_resize"
-            status_dict.increment(error_message)
             meta["status"] = status
             meta["error_message"] = error_message
-            sample_writer.write(
+            sample = (
                 None,
                 str_key,
                 sample_data[caption_indice] if caption_indice is not None else None,
@@ -199,7 +197,6 @@ def download_and_process_image_with_retry(
             return
         successes += 1
         status = "success"
-        status_dict.increment(status)
 
         if extract_exif:
             try:
@@ -231,7 +228,7 @@ def download_and_process_image_with_retry(
         img_stream.close()
         del img_stream
 
-        sample_writer.write(
+        sample = (
             img,
             str_key,
             sample_data[caption_indice] if caption_indice is not None else None,
@@ -242,7 +239,7 @@ def download_and_process_image_with_retry(
         print(f"Sample {key} failed to download: {err}")
     semaphore.release()
 
-    return successes, failed_to_download, failed_to_resize
+    return sample, error_message, successes, failed_to_download, failed_to_resize
 
 
 def compute_key(key, shard_id, oom_sample_per_shard, oom_shard_count):
@@ -382,6 +379,8 @@ class Downloader:
         oom_sample_per_shard = math.ceil(math.log10(self.number_sample_per_shard))
         with ThreadPool(self.thread_count) as thread_pool:
             for (
+                sample,
+                error_message,
                 step_successes,
                 step_failed_to_download,
                 step_failed_to_resize,
@@ -404,8 +403,6 @@ class Downloader:
                     extract_exif=self.extract_exif,
                     compute_hash=self.compute_hash,
                     verify_hash_type=self.verify_hash_type,
-                    status_dict=status_dict,
-                    sample_writer=sample_writer,
                     semaphore=semaphore,
                     resizer=self.resizer,
                 ),
@@ -414,6 +411,9 @@ class Downloader:
                 successes += step_successes
                 failed_to_download += step_failed_to_download
                 failed_to_resize += step_failed_to_resize
+
+                status_dict.increment(error_message if error_message is not None else "success")
+                sample_writer.write(*sample)
 
             sample_writer.close()
             thread_pool.terminate()
