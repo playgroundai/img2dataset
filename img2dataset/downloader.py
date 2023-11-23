@@ -80,6 +80,166 @@ def download_image_with_retry(row, timeout, retries, user_agent_token, disallowe
     return key, None, err
 
 
+def download_and_process_image_with_retry(
+    row,
+    timeout,
+    retries,
+    user_agent_token,
+    disallowed_header_directives,
+    shard_id,
+    shard_to_dl,
+    oom_sample_per_shard,
+    oom_shard_count,
+    column_list,
+    bbox_indice,
+    caption_indice,
+    crop_indice,
+    hash_indice,
+    extract_exif,
+    compute_hash,
+    verify_hash_type,
+    status_dict,
+    sample_writer,
+    semaphore,
+    resizer,
+):
+    key, img_stream, err = download_image_with_retry(
+        row, timeout, retries, user_agent_token, disallowed_header_directives
+    )
+    try:
+        _, sample_data = shard_to_dl[key]
+        str_key = compute_key(key, shard_id, oom_sample_per_shard, oom_shard_count)
+        meta = {
+            # Skip columsn containing a the verification hash and only save the compute hash
+            **{
+                column_list[i]: sample_data[i]
+                for i in range(len(column_list))
+                if (hash_indice is None or i != hash_indice)
+            },
+            "key": str_key,
+            "status": None,
+            "error_message": error_message,
+            "width": None,
+            "height": None,
+            "original_width": None,
+            "original_height": None,
+        }
+        if extract_exif:
+            meta["exif"] = None
+
+        if compute_hash is not None:
+            meta[compute_hash] = None
+
+        maybe_crop = sample_data[crop_indice] if crop_indice is not None else None
+
+        if error_message is not None:
+            failed_to_download += 1
+            status = "failed_to_download"
+            status_dict.increment(error_message)
+            meta["status"] = status
+            sample_writer.write(
+                None,
+                str_key,
+                sample_data[caption_indice] if caption_indice is not None else None,
+                meta,
+            )
+            semaphore.release()
+            return
+
+        if hash_indice is not None:
+            img_stream.seek(0)
+            test_hash = getattr(hashlib, verify_hash_type)(
+                img_stream.read()
+            ).hexdigest()
+            if test_hash != sample_data[hash_indice]:
+                failed_to_download += 1
+                status = "failed_to_download"
+                status_dict.increment("hash mismatch")
+                meta["status"] = status
+                meta["error_message"] = "hash mismatch"
+                sample_writer.write(
+                    None,
+                    str_key,
+                    sample_data[caption_indice] if caption_indice is not None else None,
+                    meta,
+                )
+                img_stream.close()
+                del img_stream
+                semaphore.release()
+                return
+
+        img_stream.seek(0)
+        bbox_list = sample_data[bbox_indice] if bbox_indice is not None else None
+        (
+            img,
+            width,
+            height,
+            original_width,
+            original_height,
+            error_message,
+        ) = resizer(img_stream, bbox_list, maybe_crop)
+        if error_message is not None:
+            failed_to_resize += 1
+            status = "failed_to_resize"
+            status_dict.increment(error_message)
+            meta["status"] = status
+            meta["error_message"] = error_message
+            sample_writer.write(
+                None,
+                str_key,
+                sample_data[caption_indice] if caption_indice is not None else None,
+                meta,
+            )
+            img_stream.close()
+            del img_stream
+            semaphore.release()
+            return
+        successes += 1
+        status = "success"
+        status_dict.increment(status)
+
+        if extract_exif:
+            try:
+                img_stream.seek(0)
+                exif = json.dumps(
+                    {
+                        k: str(v).strip()
+                        for k, v in exifread.process_file(
+                            img_stream, details=False
+                        ).items()
+                        if v is not None
+                    }
+                )
+            except Exception as _:  # pylint: disable=broad-except
+                exif = None
+            meta["exif"] = exif
+
+        if compute_hash is not None:
+            img_stream.seek(0)
+            meta[compute_hash] = getattr(hashlib, compute_hash)(
+                img_stream.read()
+            ).hexdigest()
+
+        meta["status"] = status
+        meta["width"] = width
+        meta["height"] = height
+        meta["original_width"] = original_width
+        meta["original_height"] = original_height
+        img_stream.close()
+        del img_stream
+
+        sample_writer.write(
+            img,
+            str_key,
+            sample_data[caption_indice] if caption_indice is not None else None,
+            meta,
+        )
+    except Exception as err:  # pylint: disable=broad-except
+        traceback.print_exc()
+        print(f"Sample {key} failed to download: {err}")
+    semaphore.release()
+
+
 def compute_key(key, shard_id, oom_sample_per_shard, oom_shard_count):
     true_key = (10**oom_sample_per_shard) * shard_id + key
     key_format = oom_sample_per_shard + oom_shard_count
@@ -216,142 +376,33 @@ class Downloader:
         )
         oom_sample_per_shard = math.ceil(math.log10(self.number_sample_per_shard))
         with ThreadPool(self.thread_count) as thread_pool:
-            for key, img_stream, error_message in thread_pool.imap_unordered(
-                lambda x: download_image_with_retry(
+            for _ in thread_pool.imap_unordered(
+                lambda x: download_and_process_image_with_retry(
                     x,
                     timeout=self.timeout,
                     retries=self.retries,
                     user_agent_token=self.user_agent_token,
                     disallowed_header_directives=self.disallowed_header_directives,
+                    shard_id=shard_id,
+                    shard_to_dl=shard_to_dl,
+                    oom_sample_per_shard=oom_sample_per_shard,
+                    oom_shard_count=self.oom_shard_count,
+                    column_list=self.column_list,
+                    bbox_indice=bbox_indice,
+                    caption_indice=caption_indice,
+                    crop_indice=crop_indice,
+                    hash_indice=hash_indice,
+                    extract_exif=self.extract_exif,
+                    compute_hash=self.compute_hash,
+                    verify_hash_type=self.verify_hash_type,
+                    status_dict=status_dict,
+                    sample_writer=sample_writer,
+                    semaphore=semaphore,
+                    resizer=self.resizer,
                 ),
                 loader,
             ):
-                try:
-                    _, sample_data = shard_to_dl[key]
-                    str_key = compute_key(key, shard_id, oom_sample_per_shard, self.oom_shard_count)
-                    meta = {
-                        # Skip columsn containing a the verification hash and only save the compute hash
-                        **{
-                            self.column_list[i]: sample_data[i]
-                            for i in range(len(self.column_list))
-                            if (hash_indice is None or i != hash_indice)
-                        },
-                        "key": str_key,
-                        "status": None,
-                        "error_message": error_message,
-                        "width": None,
-                        "height": None,
-                        "original_width": None,
-                        "original_height": None,
-                    }
-                    if self.extract_exif:
-                        meta["exif"] = None
-
-                    if self.compute_hash is not None:
-                        meta[self.compute_hash] = None
-
-                    maybe_crop = sample_data[crop_indice] if crop_indice is not None else None
-
-                    if error_message is not None:
-                        failed_to_download += 1
-                        status = "failed_to_download"
-                        status_dict.increment(error_message)
-                        meta["status"] = status
-                        sample_writer.write(
-                            None,
-                            str_key,
-                            sample_data[caption_indice] if caption_indice is not None else None,
-                            meta,
-                        )
-                        semaphore.release()
-                        continue
-
-                    if hash_indice is not None:
-                        img_stream.seek(0)
-                        test_hash = getattr(hashlib, self.verify_hash_type)(img_stream.read()).hexdigest()
-                        if test_hash != sample_data[hash_indice]:
-                            failed_to_download += 1
-                            status = "failed_to_download"
-                            status_dict.increment("hash mismatch")
-                            meta["status"] = status
-                            meta["error_message"] = "hash mismatch"
-                            sample_writer.write(
-                                None,
-                                str_key,
-                                sample_data[caption_indice] if caption_indice is not None else None,
-                                meta,
-                            )
-                            img_stream.close()
-                            del img_stream
-                            semaphore.release()
-                            continue
-
-                    img_stream.seek(0)
-                    bbox_list = sample_data[bbox_indice] if bbox_indice is not None else None
-                    (
-                        img,
-                        width,
-                        height,
-                        original_width,
-                        original_height,
-                        error_message,
-                    ) = self.resizer(img_stream, bbox_list, maybe_crop)
-                    if error_message is not None:
-                        failed_to_resize += 1
-                        status = "failed_to_resize"
-                        status_dict.increment(error_message)
-                        meta["status"] = status
-                        meta["error_message"] = error_message
-                        sample_writer.write(
-                            None,
-                            str_key,
-                            sample_data[caption_indice] if caption_indice is not None else None,
-                            meta,
-                        )
-                        img_stream.close()
-                        del img_stream
-                        semaphore.release()
-                        continue
-                    successes += 1
-                    status = "success"
-                    status_dict.increment(status)
-
-                    if self.extract_exif:
-                        try:
-                            img_stream.seek(0)
-                            exif = json.dumps(
-                                {
-                                    k: str(v).strip()
-                                    for k, v in exifread.process_file(img_stream, details=False).items()
-                                    if v is not None
-                                }
-                            )
-                        except Exception as _:  # pylint: disable=broad-except
-                            exif = None
-                        meta["exif"] = exif
-
-                    if self.compute_hash is not None:
-                        img_stream.seek(0)
-                        meta[self.compute_hash] = getattr(hashlib, self.compute_hash)(img_stream.read()).hexdigest()
-
-                    meta["status"] = status
-                    meta["width"] = width
-                    meta["height"] = height
-                    meta["original_width"] = original_width
-                    meta["original_height"] = original_height
-                    img_stream.close()
-                    del img_stream
-
-                    sample_writer.write(
-                        img,
-                        str_key,
-                        sample_data[caption_indice] if caption_indice is not None else None,
-                        meta,
-                    )
-                except Exception as err:  # pylint: disable=broad-except
-                    traceback.print_exc()
-                    print(f"Sample {key} failed to download: {err}")
-                semaphore.release()
+                pass
 
             sample_writer.close()
             thread_pool.terminate()
