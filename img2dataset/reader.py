@@ -67,11 +67,6 @@ class Reader:
         else:
             self.input_files = [url_path]
 
-        if self.partition_index is not None and self.partition_count is not None:
-            self.input_files = self.input_files[
-                self.partition_index :: self.partition_count
-            ]
-
         if self.input_format in ["txt", "txt.gz"]:
             self.column_list = ["url"]
         elif self.input_format in ["json", "json.gz", "jsonl", "jsonl.gz", "csv", "csv.gz", "tsv", "tsv.gz", "parquet"]:
@@ -211,7 +206,13 @@ class Reader:
             print("Sharding file number " + str(i + 1) + " of " + str(len(self.input_files)) + " called " + input_file)
 
             shards, number_shards = self._save_to_arrow(input_file, start_shard_id)
-            print("File sharded in " + str(len(shards)) + " shards")
+
+            if self.partition_index is not None and self.partition_count is not None:
+                shards = shards[self.partition_index :: self.partition_count]
+                print("File sharded in " + str(len(shards)) + f" shards (partition {self.partition_index} of {self.partition_count})")
+            else:
+                print("File sharded in " + str(len(shards)) + " shards")
+
             print(
                 "Downloading starting now, check your bandwidth speed (with bwm-ng)"
                 "your cpu (with htop), and your disk usage (with iotop)!"
