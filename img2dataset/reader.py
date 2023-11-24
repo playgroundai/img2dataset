@@ -41,6 +41,8 @@ class Reader:
         done_shards,
         tmp_path,
         crop_mode,
+        partition_index,
+        partition_count,
     ) -> None:
         self.input_format = input_format
         self.url_col = url_col
@@ -51,6 +53,8 @@ class Reader:
         self.number_sample_per_shard = number_sample_per_shard
         self.done_shards = done_shards
         self.crop_mode = crop_mode
+        self.partition_index = partition_index
+        self.partition_count = partition_count
 
         fs, url_path = fsspec.core.url_to_fs(url_list)
         self.fs = fs
@@ -62,6 +66,11 @@ class Reader:
                 raise Exception(f"No file found at path {url_path} with extension {input_format}")
         else:
             self.input_files = [url_path]
+
+        if self.partition_index is not None and self.partition_count is not None:
+            self.input_files = self.input_files[
+                self.partition_index :: self.partition_count
+            ]
 
         if self.input_format in ["txt", "txt.gz"]:
             self.column_list = ["url"]

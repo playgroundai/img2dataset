@@ -179,10 +179,35 @@ This module exposes a single function `download` which takes the same arguments 
 * **max_shard_retry** Number of time to retry failed shards at the end (default *1*)
 * **user_agent_token** Additional identifying token that will be added to the User-Agent header sent with HTTP requests to download images; for example: "img2downloader". (default *None*)
 * **disallowed_header_directives** List of X-Robots-Tags header directives that, if present in HTTP response when downloading an image, will cause the image to be excluded from the output dataset. To ignore x-robots-tags, pass '[]'. (default '["noai", "noimageai", "noindex", "noimageindex"]')
+* **parition_index** The index of the partition to download. Useful for distributed downloading. (default *None*)
+* **partition_count** The total number of partitions. Useful for distributed downloading. (default *None*)
 
 ## Incremental mode
 
 If a first download got interrupted for any reason, you can run again with --incremental "incremental" (this is the default) and using the same output folder , the same number_sample_per_shard and the same input urls, and img2dataset will complete the download.
+
+## Distributed downloading
+
+If you have a large dataset to download, you may want to use multiple machines to download it.  This can be done by partitioning
+the dataset into multiple parts, and then running img2dataset on each partition.  For example, if you have a dataset with 1000
+shards, you can run img2dataset on 10 machines, each downloading 100 shards.  To do this, you would run img2dataset on each machine
+with the following options:
+
+```bash
+# Machine 1
+img2dataset --url_list=myimglist.txt --output_folder=output_folder ... \
+--partition_count=10 --partition_index=0
+
+# Machine 2
+img2dataset --url_list=myimglist.txt --output_folder=output_folder ... \
+--partition_count=10 --partition_index=1
+
+...
+
+# Machine 10
+img2dataset --url_list=myimglist.txt --output_folder=output_folder ... \
+--partition_count=10 --partition_index=9
+```
 
 ## Output format choice
 
