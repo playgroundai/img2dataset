@@ -146,7 +146,7 @@ def download_and_process_image_with_retry(
                 meta,
             )
             semaphore.release()
-            return
+            return sample, error_message, successes, failed_to_download, failed_to_resize
 
         if hash_indice is not None:
             img_stream.seek(0)
@@ -168,7 +168,7 @@ def download_and_process_image_with_retry(
                 img_stream.close()
                 del img_stream
                 semaphore.release()
-                return
+                return sample, error_message, successes, failed_to_download, failed_to_resize
 
         img_stream.seek(0)
         bbox_list = sample_data[bbox_indice] if bbox_indice is not None else None
@@ -194,7 +194,7 @@ def download_and_process_image_with_retry(
             img_stream.close()
             del img_stream
             semaphore.release()
-            return
+            return sample, error_message, successes, failed_to_download, failed_to_resize
         successes += 1
         status = "success"
 
