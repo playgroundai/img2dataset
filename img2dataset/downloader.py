@@ -378,42 +378,46 @@ class Downloader:
         )
         oom_sample_per_shard = math.ceil(math.log10(self.number_sample_per_shard))
         with ThreadPool(self.thread_count) as thread_pool:
-            for (
-                sample,
-                error_message,
-                step_successes,
-                step_failed_to_download,
-                step_failed_to_resize,
-            ) in thread_pool.imap_unordered(
-                lambda x: download_and_process_image_with_retry(
-                    x,
-                    timeout=self.timeout,
-                    retries=self.retries,
-                    user_agent_token=self.user_agent_token,
-                    disallowed_header_directives=self.disallowed_header_directives,
-                    shard_id=shard_id,
-                    shard_to_dl=shard_to_dl,
-                    oom_sample_per_shard=oom_sample_per_shard,
-                    oom_shard_count=self.oom_shard_count,
-                    column_list=self.column_list,
-                    bbox_indice=bbox_indice,
-                    caption_indice=caption_indice,
-                    crop_indice=crop_indice,
-                    hash_indice=hash_indice,
-                    extract_exif=self.extract_exif,
-                    compute_hash=self.compute_hash,
-                    verify_hash_type=self.verify_hash_type,
-                    semaphore=semaphore,
-                    resizer=self.resizer,
-                ),
-                loader,
-            ):
-                successes += step_successes
-                failed_to_download += step_failed_to_download
-                failed_to_resize += step_failed_to_resize
-
-                status_dict.increment(error_message if error_message is not None else "success")
-                sample_writer.write(*sample)
+            try:
+                for (
+                    sample,
+                    error_message,
+                    step_successes,
+                    step_failed_to_download,
+                    step_failed_to_resize,
+                ) in thread_pool.imap_unordered(
+                    lambda x: download_and_process_image_with_retry(
+                        x,
+                        timeout=self.timeout,
+                        retries=self.retries,
+                        user_agent_token=self.user_agent_token,
+                        disallowed_header_directives=self.disallowed_header_directives,
+                        shard_id=shard_id,
+                        shard_to_dl=shard_to_dl,
+                        oom_sample_per_shard=oom_sample_per_shard,
+                        oom_shard_count=self.oom_shard_count,
+                        column_list=self.column_list,
+                        bbox_indice=bbox_indice,
+                        caption_indice=caption_indice,
+                        crop_indice=crop_indice,
+                        hash_indice=hash_indice,
+                        extract_exif=self.extract_exif,
+                        compute_hash=self.compute_hash,
+                        verify_hash_type=self.verify_hash_type,
+                        semaphore=semaphore,
+                        resizer=self.resizer,
+                    ),
+                    loader,
+                ):
+                    successes += step_successes
+                    failed_to_download += step_failed_to_download
+                    failed_to_resize += step_failed_to_resize
+    
+                    status_dict.increment(error_message if error_message is not None else "success")
+                    sample_writer.write(*sample)
+            except Exception  as exc:
+                traceback.print_exc()
+                print(f'XXXehsan error: {exc}')
 
             sample_writer.close()
             thread_pool.terminate()
